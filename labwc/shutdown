@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# Cleanup on labwc exit
+killall wlsunset 2>/dev/null

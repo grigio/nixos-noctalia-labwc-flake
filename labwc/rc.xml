@@ -1,0 +1,175 @@
+<?xml version="1.0"?>
+<labwc_config>
+  <core>
+    <perMonitorDesktop>yes</perMonitorDesktop>
+  </core>
+  <windowSwitcher>
+    <osd show="yes" style="thumbnail" />
+  </windowSwitcher>
+  <resize>
+    <minimumArea>16</minimumArea>
+    <cornerRange>20</cornerRange>
+  </resize>
+  <placement>
+    <policy>automatic</policy>
+  </placement>
+  <theme>
+    <name>gruvbox-material-dark-blocks</name>
+    <cornerRadius>12</cornerRadius>
+    <font name="CaskaydiaCove NFP" size="12"/>
+    <dropShadows>yes</dropShadows>
+    <keepBorder>no</keepBorder>
+  </theme>
+  <desktops number="4" />
+  <cursor theme="Adwaita" size="28"/>
+
+  <desktop>
+    <name>1</name>
+    <monitor>DP-2</monitor>
+    <focusAction>no</focusAction>
+  </desktop>
+  <desktop>
+    <name>2</name>
+    <monitor>DP-2</monitor>
+    <focusAction>no</focusAction>
+  </desktop>
+
+  <desktop>
+    <name>1</name>
+    <monitor>DP-2</monitor>
+  </desktop>
+  <desktop>
+    <name>2</name>
+    <monitor>DP-2</monitor>
+  </desktop>
+  <desktop>
+    <name>3</name>
+    <monitor>eDP-1</monitor>
+  </desktop>
+  <desktop>
+    <name>4</name>
+    <monitor>eDP-1</monitor>
+  </desktop>
+  <keyboard>
+    <default/>
+
+    <keybind key="XF86AudioPlay">
+      <action name="Execute">
+        <command>playerctl play-pause</command>
+      </action>
+    </keybind>
+    <keybind key="XF86AudioPause">
+      <action name="Execute">
+        <command>playerctl play-pause</command>
+      </action>
+    </keybind>
+
+    <keybind key="W-Up">
+      <action name="ToggleMaximize" direction="both" />
+    </keybind>
+    <keybind key="W-Down">
+      <action name="ToggleMaximize" direction="both" />
+    </keybind>
+
+    <keybind key="W-S-Right">
+      <action name="SendToDesktop" to="right" follow="yes" wrap="yes" />
+      <action name="Focus" />
+    </keybind>
+
+    <keybind key="W-S-Left">
+      <action name="SendToDesktop" to="left" follow="yes" wrap="yes" />
+      <action name="Focus" />
+    </keybind>
+
+    <keybind key="W-w"><action name="Close" /></keybind>
+
+    <keybind key="C-W-Left"><action name="GoToDesktop" to="left" /></keybind>
+    <keybind key="C-W-Right"><action name="GoToDesktop" to="right" /></keybind>
+
+    <keybind key="W-1"><action name="GoToDesktop" to="1" /></keybind>
+    <keybind key="W-2"><action name="GoToDesktop" to="2" /></keybind>
+    <keybind key="W-3"><action name="GoToDesktop" to="3" /></keybind>
+    <keybind key="W-4"><action name="GoToDesktop" to="4" /></keybind>
+
+    <keybind key="W-Return">
+      <action name="Execute" command="kitty"/>
+    </keybind>
+    <keybind key="W-A-r">
+      <action name="Execute" command="labwc --reconfigure"/>
+    </keybind>
+
+    <keybind key="W-Space">
+      <action name="Execute" command="noctalia msg panel-toggle launcher"/>
+    </keybind>
+
+    <keybind key="W-S-w">
+      <action name="Execute" command="noctalia msg panel-toggle session"/>
+    </keybind>
+
+    <keybind key="Print">
+      <action name="Execute">
+        <command>sh -c 'grim -g "$(slurp)" - | satty --filename - --actions-on-enter save-to-clipboard'</command>
+      </action>
+    </keybind>
+
+    <keybind key="W-n">
+      <action name="Execute">
+        <command>wlsunset -t 2500 -T 3500 -g 0.8</command>
+      </action>
+    </keybind>
+
+    <keybind key="W-S-n">
+      <action name="Execute">
+        <command>killall wlsunset</command>
+      </action>
+    </keybind>
+
+    <keybind key="A-1">
+      <action name="Execute">
+        <command>obs-cmd scene switch fullin</command>
+      </action>
+    </keybind>
+
+    <keybind key="A-2">
+      <action name="Execute">
+        <command>obs-cmd scene switch @promo</command>
+      </action>
+    </keybind>
+
+    <keybind key="A-3">
+      <action name="Execute">
+        <command>obs-cmd scene switch @desk-cam</command>
+      </action>
+    </keybind>
+
+    <keybind key="A-5">
+      <action name="Execute">
+        <command>obs-cmd scene switch @techo-academy</command>
+      </action>
+    </keybind>
+
+    <keybind key="A-e">
+      <action name="Execute">
+        <command>obs-cmd scene switch @outro</command>
+      </action>
+    </keybind>
+
+    <keybind key="A-r">
+      <action name="Execute">
+        <command>obs-cmd recording toggle</command>
+      </action>
+    </keybind>
+
+  </keyboard>
+  <mouse>
+    <default/>
+  </mouse>
+  <libinput>
+    <device category="touchpad">
+      <tapAndDrag>yes</tapAndDrag>
+      <dragLock>yes</dragLock>
+      <naturalScroll>yes</naturalScroll>
+      <threeFingerDrag>no</threeFingerDrag>
+    </device>
+  </libinput>
+</labwc_config>

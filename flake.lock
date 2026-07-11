@@ -1,0 +1,77 @@
+{
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1783604885,
+        "narHash": "sha256-tzMgSkV7kljEkqIjlgV6F+n+xD+/a35Db8bs7a4BFAo=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "767b0d3ec98a143ad9ed7dfc0d5553510ac27133",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1783224372,
+        "narHash": "sha256-FGQ8TfSm9WviNE/fQAWsKs+y4GkX8fU4EScewpw54Y8=",
+        "rev": "d407951447dcd00442e97087bf374aad70c04cea",
+        "type": "tarball",
+        "url": "https://releases.nixos.org/nixos/unstable/nixos-26.11pre1027867.d407951447dc/nixexprs.tar.xz"
+      },
+      "original": {
+        "type": "tarball",
+        "url": "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz"
+      }
+    },
+    "noctalia": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_2"
+      },
+      "locked": {
+        "lastModified": 1783777278,
+        "narHash": "sha256-P6U/493VTqloCAeEtJM6Rnt+twu2TtjsOGy0HDsopoA=",
+        "owner": "noctalia-dev",
+        "repo": "noctalia",
+        "rev": "3267d212594463c9a8472d4cb688ced0356e9a2f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "noctalia-dev",
+        "ref": "cachix",
+        "repo": "noctalia",
+        "type": "github"
+      }
+    },
+    "noctalia-labwc-color-sync": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1783344469,
+        "narHash": "sha256-VgqxdAdL1vwLY7O8YHMi7QL3NxyKpanKbdx5YKbdmkM=",
+        "owner": "grigio",
+        "repo": "noctalia-labwc-color-sync",
+        "rev": "73408360e64ec575af20804111c5de76ff89f438",
+        "type": "github"
+      },
+      "original": {
+        "owner": "grigio",
+        "repo": "noctalia-labwc-color-sync",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "noctalia": "noctalia",
+        "noctalia-labwc-color-sync": "noctalia-labwc-color-sync"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

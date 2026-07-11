@@ -1,0 +1,6 @@
+#!/bin/sh
+
+# Start Wayland-aware services that need the compositor running
+systemctl --user start noctalia.service &
+systemctl --user start polkit-gnome.service &
+systemctl --user start voxtype.service &

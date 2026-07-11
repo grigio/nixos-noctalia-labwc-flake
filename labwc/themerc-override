@@ -1,0 +1,37 @@
+# window border
+window.active.border.color: #98971a
+window.inactive.border.color: #9e8861
+
+# window titlebar background (elevated surface, not the accent hue)
+window.active.title.bg.color: #e7d3a2
+window.inactive.title.bg.color: #ebdbb2
+window.active.title.bg: flat
+window.inactive.title.bg: flat
+
+window.active.label.text.color: #3c3836
+window.inactive.label.text.color: #7c6f64
+window.label.text.justify: center
+
+# window buttons
+window.active.button.unpressed.image.color: #7c6f64
+window.active.button.hover.image.color: #98971a
+window.active.button.pressed.image.color: #98971a
+window.inactive.button.unpressed.image.color: #7c6f64
+window.inactive.button.hover.image.color: #7c6f64
+window.inactive.button.pressed.image.color: #7c6f64
+
+# menu
+menu.border.color: #9e8861
+menu.items.bg.color: #e7d3a2
+menu.items.text.color: #3c3836
+menu.items.active.bg.color: #98971a
+menu.items.active.text.color: #fbf1c7
+menu.separator.color: #bbac90
+menu.title.bg.color: #e7d3a2
+menu.title.text.color: #3c3836
+
+# on screen display (window-cycle dialog)
+osd.bg.color: #e7d3a2
+osd.border.color: #9e8861
+osd.label.text.color: #3c3836
+osd.window-switcher.preview.border.color: #9e8861
