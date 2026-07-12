@@ -1,5 +1,7 @@
 # NixOS + Noctalia + Labwc Flake
 
+![demo](demo.gif)
+
 Backup of the system flake config at `/etc/nixos`. You need to use your `/etc/nixos/hardware-configuration.nix`
 
 ## Usage
