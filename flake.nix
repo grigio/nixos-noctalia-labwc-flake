@@ -18,12 +18,10 @@
   outputs = { self, nixpkgs, noctalia, noctalia-labwc-color-sync, ... }: {
     nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
+      specialArgs = { inherit noctalia-labwc-color-sync; };
       modules = [
         ./configuration.nix
         noctalia.nixosModules.default
-        ({ pkgs, ... }: {
-          environment.systemPackages = [ (pkgs.callPackage noctalia-labwc-color-sync {}) ];
-        })
       ];
     };
 

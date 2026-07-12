@@ -1,9 +1,22 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, noctalia-labwc-color-sync, ... }:
 
 let
 
+  # === User-configurable settings ===
+  # Change these values to adapt this config to a different machine/user.
+  settings = {
+    hostName = "nixos";
+    userName = "g";
+    timeZone = "Europe/Rome";
+    locale = "en_US.UTF-8";
+    # Set to locale to match defaultLocale for a single-locale setup.
+    extraLocale = "it_IT.UTF-8";
+  };
+
   waitForWayland = pkgs.writeShellScriptBin "wait-for-wayland" ''
-    while [ ! -S "$XDG_RUNTIME_DIR/''${WAYLAND_DISPLAY-wayland-0}" ]; do
+    XDG_RUNTIME_DIR=''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+    WAYLAND_DISPLAY=''${WAYLAND_DISPLAY:-wayland-0}
+    while [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; do
       sleep 0.2
     done
   '';
@@ -39,6 +52,8 @@ let
     hash = "sha256-YO1bw90U7qhWST0zQ0m0BXgt3K8AKNS130CINF+6Lv4=";
     name = "ggml-base.bin";
   };
+  noctaliaColorSyncPkg = pkgs.callPackage noctalia-labwc-color-sync { };
+
   voxtypeToml = pkgs.formats.toml { };
   voxtypeConfig = voxtypeToml.generate "voxtype-config.toml" {
     state_file = "auto";
@@ -124,7 +139,7 @@ in
   ];
 
   # Networking
-  networking.hostName = "nixos";
+  networking.hostName = settings.hostName;
   networking.networkmanager.enable = true;
   services.resolved.enable = true;
   #networking.firewall.enable = true;
@@ -138,19 +153,19 @@ in
   };
 
   # Time & locale
-  time.timeZone = "Europe/Rome";
+  time.timeZone = settings.timeZone;
 
-  i18n.defaultLocale = "en_US.UTF-8";
+  i18n.defaultLocale = settings.locale;
   i18n.extraLocaleSettings = {
-    LC_ADDRESS = "it_IT.UTF-8";
-    LC_IDENTIFICATION = "it_IT.UTF-8";
-    LC_MEASUREMENT = "it_IT.UTF-8";
-    LC_MONETARY = "it_IT.UTF-8";
-    LC_NAME = "it_IT.UTF-8";
-    LC_NUMERIC = "it_IT.UTF-8";
-    LC_PAPER = "it_IT.UTF-8";
-    LC_TELEPHONE = "it_IT.UTF-8";
-    LC_TIME = "it_IT.UTF-8";
+    LC_ADDRESS = settings.extraLocale;
+    LC_IDENTIFICATION = settings.extraLocale;
+    LC_MEASUREMENT = settings.extraLocale;
+    LC_MONETARY = settings.extraLocale;
+    LC_NAME = settings.extraLocale;
+    LC_NUMERIC = settings.extraLocale;
+    LC_PAPER = settings.extraLocale;
+    LC_TELEPHONE = settings.extraLocale;
+    LC_TIME = settings.extraLocale;
   };
 
   # Display server & WM (pure Wayland via labwc, no X11)
@@ -159,8 +174,16 @@ in
     restart = true;
     settings = {
       initial_session = {
-        command = "${pkgs.labwc}/bin/labwc";
-        user = "g";
+        command = "${pkgs.writeShellScriptBin "labwc-session" ''
+          # Start user services. Use --no-block so systemctl returns immediately
+          # even though ExecStartPre waits for the Wayland socket.
+          # labwc creates the socket moments later after exec.
+          systemctl --user start --no-block \
+            noctalia.service polkit-gnome.service voxtype.service \
+            noctalia-labwc-sync.service
+          exec ${pkgs.labwc}/bin/labwc
+        ''}/bin/labwc-session";
+        user = settings.userName;
       };
       default_session = {
         command = "${pkgs.tuigreet}/bin/tuigreet --time --asterisks --remember --greeting 'Welcome to NixOS' --greet-align center --window-padding 1 --container-padding 4 --prompt-padding 1 --power-shutdown 'loginctl poweroff' --power-reboot 'loginctl reboot' --theme ${greeterTheme} --cmd ${pkgs.labwc}/bin/labwc";
@@ -180,6 +203,14 @@ in
   systemd.user.services.noctalia.serviceConfig.ExecStartPre = [
     "${waitForWayland}/bin/wait-for-wayland"
   ];
+
+  systemd.user.services.noctalia-labwc-sync = {
+    path = [ pkgs.labwc ];
+    serviceConfig = {
+      ExecStart = [ "" "${noctaliaColorSyncPkg}/bin/noctalia-labwc-theme-sync" ];
+      ExecStartPost = [ "" "${noctaliaColorSyncPkg}/bin/noctalia-labwc-reconfigure" ];
+    };
+  };
 
   environment.etc = {
     "labwc/rc.xml".source = ./labwc/rc.xml;
@@ -266,7 +297,7 @@ in
 
   # User accounts
 
-  users.users.g = {
+  users.users.${settings.userName} = {
     isNormalUser = true;
     description = "user";
     extraGroups = [ "networkmanager" "wheel" "docker" "input" "video" ];
@@ -303,7 +334,6 @@ in
     fastfetch
     nano
     nautilus
-    brave
     opencode
     gnome-text-editor
     fuse3
@@ -312,12 +342,12 @@ in
     adwaita-icon-theme
     libsecret
     gsettings-desktop-schemas
+    noctaliaColorSyncPkg
 
     brightnessctl
     satty
     slurp
     grim
-    obs-studio
   ];
 
   # Add /share/icons so icon themes (Adwaita) are linked into the system profile.
