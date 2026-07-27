@@ -58,8 +58,7 @@ jobs:
 
             - \`nix flake update\` bumped all inputs to latest.
             - Validated with \`nix flake check --all-systems\`.
-            - Auto-merge enabled — will merge automatically." \
-            --label dependencies)
+            - Auto-merge enabled — will merge automatically.")
           echo "pr-url=$PR_URL" >> "$GITHUB_OUTPUT"
 
       - name: enable auto-merge
