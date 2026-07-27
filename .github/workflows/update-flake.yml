@@ -46,23 +46,14 @@ jobs:
           git push origin auto/update-flake-lock --force
 
       - name: create PR
-        id: create-pr
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          PR_URL=$(gh pr create \
+          gh pr create \
             --base main \
             --head auto/update-flake-lock \
             --title "chore: weekly flake.lock update" \
             --body "Automated weekly \`flake.lock\` update.
 
             - \`nix flake update\` bumped all inputs to latest.
-            - Validated with \`nix flake check --all-systems\`.
-            - Auto-merge enabled — will merge automatically.")
-          echo "pr-url=$PR_URL" >> "$GITHUB_OUTPUT"
-
-      - name: enable auto-merge
-        if: steps.create-pr.outputs.pr-url != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh pr merge --auto --squash "${{ steps.create-pr.outputs.pr-url }}"
+            - Validated with \`nix flake check --all-systems\`." || true
