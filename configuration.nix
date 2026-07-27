@@ -107,6 +107,8 @@ in
     swapDevices = [ ];
   };
 
+  disabledModules = [ "programs/wayland/noctalia.nix" ];
+
   #swapDevices = [{
   #  device = "/swapfile";
   #  size = 4096; #mb
