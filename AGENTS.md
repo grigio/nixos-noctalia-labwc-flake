@@ -75,8 +75,10 @@ The config is at `/etc/nixos/configuration.nix`. Relevant sections:
   `noctalia-labwc-color-sync` (non-flake). Single `nixos` config for `x86_64-linux`.
   `noctalia-labwc-color-sync` passed via `specialArgs`. Dev shell provides
   `nixpkgs-fmt` + `nixos-rebuild`. Formatter: `nixpkgs-fmt`.
-- **`configuration.nix`**: 366 lines. Includes `./hardware-configuration.nix`
-  (not in repo — must be generated per-machine via `nixos-generate-config`).
+- **`configuration.nix`**: 369 lines. Imports `./hardware-configuration.nix`
+  conditionally (via `builtins.pathExists`). When absent (CI/fresh checkout),
+  a minimal stub provides `fileSystems."/"` + `swapDevices` so `nix flake check`
+  passes without machine-specific hardware config.
 
 ## Flake operations
 

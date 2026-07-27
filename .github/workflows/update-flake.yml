@@ -1,0 +1,58 @@
+name: update-flake-lock
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            extra-trusted-substituters = https://noctalia.cachix.org
+            extra-trusted-public-keys = noctalia.cachix.org-1:pCOR47nnMEo5thcxNDtzWpOxNFQsBRglJzxWPp3dkU4=
+
+      - name: configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: update flake.lock
+        run: nix flake update
+
+      - name: commit flake.lock
+        run: |
+          git add flake.lock
+          git commit -m "chore: weekly flake.lock update"
+
+      - name: validate flake
+        run: nix flake check --all-systems
+
+      - name: push branch
+        env:
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          git remote set-url origin https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+          git branch -f auto/update-flake-lock
+          git push origin auto/update-flake-lock --force
+
+      - name: create PR with auto-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr create \
+            --base main \
+            --head auto/update-flake-lock \
+            --title "chore: weekly flake.lock update" \
+            --body "Automated weekly \`flake.lock\` update.
+
+            - \`nix flake update\` bumped all inputs to latest.
+            - Validated with \`nix flake check --all-systems\`.
+            - Auto-merge enabled — will merge automatically." \
+            --label dependencies \
+            --auto --squash || true

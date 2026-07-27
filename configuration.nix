@@ -100,9 +100,12 @@ let
 in
 
 {
-  imports = [
-    ./hardware-configuration.nix
-  ];
+  imports = lib.optional (builtins.pathExists ./hardware-configuration.nix) ./hardware-configuration.nix
+    ++ lib.optional (!builtins.pathExists ./hardware-configuration.nix) {
+    # CI/minimal stub — real machines generate hardware-configuration.nix
+    fileSystems."/" = { device = "/dev/null"; fsType = "none"; };
+    swapDevices = [ ];
+  };
 
   #swapDevices = [{
   #  device = "/swapfile";

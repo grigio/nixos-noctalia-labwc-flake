@@ -1,5 +1,8 @@
 # NixOS + Noctalia + Labwc Flake
 
+[![NixOS](https://img.shields.io/badge/NixOS-26.11-blue?style=flat-square&logo=nixos&logoColor=white)](https://nixos.org)
+[![CI](https://github.com/grigio/nixos-noctalia-labwc-flake/actions/workflows/update-flake.yml/badge.svg)](https://github.com/grigio/nixos-noctalia-labwc-flake/actions/workflows/update-flake.yml)
+
 ![demo](demo.gif)
 
 Declarative NixOS 26.11 flake for a modern Wayland desktop — **labwc** compositor + **Noctalia V5** AI desktop shell + **Voxtype** voice-to-text.
@@ -56,3 +59,7 @@ The current user is `g`. To rename it, edit `configuration.nix`:
 - Noctalia is pinned via the `cachix` branch (always points to the latest cached commit).
 - Bootloader: **Limine** (not systemd-boot).
 - `hardware-configuration.nix` is **not** in the repo — generate it with `nixos-generate-config` on your machine.
+
+## Automatic flake updates
+
+A GitHub Actions workflow ([update-flake.yml](.github/workflows/update-flake.yml)) runs every Monday at 06:00 UTC to update `flake.lock` and open a PR. It validates the flake with `nix flake check --all-systems` before proposing the change.
