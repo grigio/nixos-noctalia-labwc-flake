@@ -50,10 +50,10 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE"
           git add .config/nixos-backup/flake.lock
-          git commit -m "chore: weekly flake.lock update"
+          git diff --cached --quiet || git commit -m "chore: weekly flake.lock update"
 
       - name: build system closure (validate config)
-        run: nix build .#nixosConfigurations.nixos.config.system.build.toplevel
+        run: nix build .#nixosConfigurations.nixos.config.system.build.toplevel --accept-flake-config
 
       - name: push branch
         env:
