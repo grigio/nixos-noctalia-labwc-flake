@@ -30,6 +30,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: lint nix files
+        run: |
+          deadnix --fail .
+          statix check .
+
       - name: generate dummy hardware-configuration.nix for CI
         run: |
           # Generate a dummy hardware config for CI validation.
