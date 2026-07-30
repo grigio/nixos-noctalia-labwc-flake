@@ -663,10 +663,10 @@ in {
       RemainAfterExit = true;
       ExecStart = "${pkgs.bash}/bin/bash -c '
         for dev in /dev/disk/by-id/usb-*; do
-          [ -e "$dev" ] || continue
-          block=$(basename "$(readlink -f "$dev")")
+          [ -e \"$dev\" ] || continue
+          block=$(basename \"$(readlink -f \"$dev\")\")
           rot=$(cat /sys/block/$block/queue/rotational 2>/dev/null) || continue
-          [ "$rot" = "0" ] || continue
+          [ \"$rot\" = \"0\" ] || continue
           echo 512 > /sys/block/$block/queue/nr_requests 2>/dev/null || true
         done
       '";
