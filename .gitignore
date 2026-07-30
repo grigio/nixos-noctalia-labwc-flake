@@ -1,2 +1,3 @@
 .config/nixos-backup/hardware-configuration.nix
 .config/dconf/user
+hardware-configuration.nix.bak
