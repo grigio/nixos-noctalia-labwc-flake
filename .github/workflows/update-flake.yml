@@ -9,6 +9,10 @@ permissions:
   contents: write
   pull-requests: write
 
+defaults:
+  run:
+    working-directory: .config/nixos-backup
+
 jobs:
   lock:
     runs-on: ubuntu-latest
@@ -26,21 +30,36 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: generate dummy hardware-configuration.nix for CI
+        run: |
+          cat > hardware-configuration.nix << 'EOF'
+          { config, lib, pkgs, modulesPath, ... }: {
+            imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
+            boot.initrd.availableKernelModules = [ "nvme" "xhci_pci" "uas" "usb_storage" "sd_mod" ];
+            fileSystems."/" = { device = "/dev/null"; fsType = "ext4"; };
+            fileSystems."/boot" = { device = "/dev/null"; fsType = "vfat"; };
+            swapDevices = [ ];
+            nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
+          }
+          EOF
+
       - name: update flake.lock
         run: nix flake update
 
       - name: commit flake.lock
         run: |
-          git add flake.lock
+          cd "$GITHUB_WORKSPACE"
+          git add .config/nixos-backup/flake.lock
           git commit -m "chore: weekly flake.lock update"
 
-      - name: validate flake
-        run: nix flake check --all-systems
+      - name: build system closure (validate config)
+        run: nix build .#nixosConfigurations.nixos.config.system.build.toplevel
 
       - name: push branch
         env:
           GIT_TERMINAL_PROMPT: "0"
         run: |
+          cd "$GITHUB_WORKSPACE"
           git remote set-url origin https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
           git branch -f auto/update-flake-lock
           git push origin auto/update-flake-lock --force
@@ -57,7 +76,7 @@ jobs:
             --body "Automated weekly \`flake.lock\` update.
 
             - \`nix flake update\` bumped all inputs to latest.
-            - Validated with \`nix flake check --all-systems\`.") || true
+            - Validated by building \`.config/nixos-backup#nixos\` system closure.") || true
           echo "pr-url=$PR_URL" >> "$GITHUB_OUTPUT"
 
       - name: merge PR

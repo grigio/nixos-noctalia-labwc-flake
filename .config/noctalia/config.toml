@@ -1,0 +1,8 @@
+[theme.templates]
+enable_builtin_templates = true
+builtin_ids = []
+
+[theme.templates.user.labwc-themerc]
+input_path = "~/.config/noctalia/templates/labwc.conf"
+output_path = "~/.config/labwc/themerc-override"
+post_hook = "labwc --reconfigure"

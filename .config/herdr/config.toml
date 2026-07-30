@@ -1,0 +1,6 @@
+onboarding = false
+[keys]
+prefix = "ctrl+backtick"
+
+[ui]
+prompt_new_tab_name = false

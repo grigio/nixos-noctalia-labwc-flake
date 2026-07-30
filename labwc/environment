@@ -1,2 +1,0 @@
-# Compose key on Caps Lock
-XKB_DEFAULT_OPTIONS=compose:caps

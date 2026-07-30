@@ -1,0 +1,3 @@
+This file marks that dotfiles are active and being managed by the dotfiles activation script.
+It is ignored by the dotfiles symlink merge and exists only as a marker.
+Edit or remove as needed.

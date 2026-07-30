@@ -1,269 +1,166 @@
 # System doc for agents — keep updated with non-trivial short system info
 
-
-# System Password
-
-The system password is `password`.
-
 # Operating System & Process Structure
 
-This system runs **NixOS 26.11 (Zokor)** with Linux kernel `7.1.3` on `x86_64`. The OS is
-built declaratively via the Nix package manager (`nix-daemon` runs as root). The session
-manager is **labwc** (a Wayland compositor), running on **kitty** terminal emulator.
-Key background services include **systemd** (init, journald, udevd, timesyncd),
+This system runs **NixOS** (latest stable). All userland binaries are sourced from
+the Nix store under `/nix/store/...`, confirming a fully immutable, reproducible system root.
+The session manager is **labwc** (a Wayland compositor), running on **alacritty** terminal
+emulator. Key background services include **systemd** (init, journald, udevd, timesyncd),
 **NetworkManager**, **wireplumber** (audio session manager), **pipewire** (audio server),
-and **xdg-desktop-portal** (desktop integration). At the time of profiling, the most
-memory-intensive user process is **opencode** itself (~705MB RSS, 10% of 16GB),
-followed by **noctalia** (~160MB), **kitty** (~131MB), **labwc** (~115MB), and
-**voxtype** (~110MB). All userland binaries are sourced from the Nix store under
-`/nix/store/...`, confirming a fully immutable, reproducible system root.
+and **xdg-desktop-portal** (desktop integration).
+
+**Notable:**
+- Bootloader: **Limine** (EFI removable).
+- **OOMD:** active, with user-slice monitoring.
+- **tmpfs on /tmp:** 2GB.
+- **No XWayland** (attempted at policy level, but labwc 0.20.1 starts it anyway).
 
 # Display manager & session startup
 
 Labwc is launched by **greetd** via `initial_session`:
 the display manager auto-logs user `g` into `labwc`
 on VT1. A fallback greeter is configured as `default_session`
-for manual login if `initial_session` is removed.
+for manual login if `initial_session` fails.
 
 **greetd + Wayland greeter (gotcha, fixed):**
-`greetd-mini-wl-greeter` is a Wayland *client*, NOT a standalone
+\`greetd-mini-wl-greeter\` is a Wayland *client*, NOT a standalone
 compositor, and renders a blank/unusable screen — avoid it.
 Use **`tuigreet`** (a TUI greeter that runs directly on the tty,
 no compositor needed) as the `default_session`:
 ```nix
 default_session = {
-  command = "${pkgs.tuigreet}/bin/tuigreet --time --asterisks --remember --greeting 'Welcome to NixOS' --greet-align center --window-padding 1 --container-padding 4 --prompt-padding 1 --power-shutdown 'loginctl poweroff' --power-reboot 'loginctl reboot' --theme ${greeterTheme} --cmd ${pkgs.labwc}/bin/labwc";
+  command = "${pkgs.tuigreet}/bin/tuigreet --time --asterisks --remember --greeting 'Welcome to NixOS' --greet-align center --window-padding 1 --container-padding 4 --prompt-padding 1 --power-shutdown 'loginctl poweroff' --power-reboot 'loginctl reboot' --theme ${greeterTheme} --cmd ${labwcSession}";
   user = "greeter";
 };
 ```
-`--cmd` tells tuigreet what to launch after login (here: `labwc`).
+`--cmd` tells tuigreet what to launch after login. **Must use `${labwcSession}`, not bare labwc** —
+otherwise user services (noctalia, voxtype, polkit-gnome) are never started.
 `greeterTheme` is a `pkgs.writeText "tuigreet-theme.toml"` TOML
-color theme defined in the `let` block (no `--date` flag in 0.9.1;
-`--time` already shows date+time). The greeter runs as user `greeter`
+color theme defined in the `let` block. The greeter runs as user `greeter`
 (in `video`/`input` groups).
 Do NOT use `cage`+`greetd-mini-wl-greeter` — it shows a blank screen
 and never accepts input.
 
-**labwc-session wrapper (`initial_session.command`):**
-The `initial_session` does NOT launch labwc directly. It launches a
-`labwc-session` shell script that:
-1. Starts user services with `--no-block` (avoids deadlock since labwc
-   creates the Wayland socket moments later): `noctalia.service`,
-   `polkit-gnome.service`, `voxtype.service`, `noctalia-labwc-sync.service`.
-2. Then `exec labwc`.
-
-This means services that depend on `graphical-session.target` are started
-immediately rather than when labwc sets up the session — the `--no-block`
-flag is crucial to prevent systemd waiting for the Wayland socket before
-labwc has created it.
-
-User services with Wayland socket wait loops (polkit-gnome, voxtype, noctalia)
+User services that depend on Wayland (noctalia, polkit-gnome, voxtype)
 use an `ExecStartPre` helper (`waitForWayland` in the let block)
 to poll for `$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY` before starting,
 preventing the "cannot open display" / "no peercred" failures.
+The `noctalia-labwc-sync.service` (oneshot) does NOT need this because
+its reconfigure script has its own Wayland socket wait loop.
 
-The config is at `/etc/nixos/configuration.nix`. Relevant sections:
+All services (plus `noctalia-labwc-sync.path`) have `wantedBy = [ "graphical-session.target" ]` and
+`PartOf=graphical-session.target`, but `graphical-session.target` has
+`RefuseManualStart=yes` (systemd default for targets), so it cannot be
+started directly. Instead, a **`labwcSession`** wrapper (defined in the
+`let` block) is used as both greetd's `initial_session.command` and
+tuigreet's `--cmd`. It waits for the user systemd instance to be ready,
+then starts services via `systemctl --user start --no-block ...`,
+then `exec`s labwc. This replaces the old `~/.config/labwc/autostart`.
+
+Services started by `labwcSession`: `gnome-keyring-daemon.service`,
+`noctalia.service`, `voxtype.service`, `polkit-gnome.service`,
+`noctalia-labwc-sync.path`.
+
+**Key gotchas:**
+- **Must use `--no-block`** for all `systemctl --user start` calls in `labwcSession`.
+  Without it, services with `wait-for-wayland` ExecStartPre deadlock: systemctl waits
+  for the service to start, but the service waits for the Wayland socket, which labwc
+  hasn't created yet (it's exec'd after the systemctl call). With `--no-block`,
+  systemctl returns immediately, labwc starts, creates the socket, and the service's
+  `wait-for-wayland` pre-exec eventually succeeds in the background.
+- **`systemctl --user is-system-running`** during early boot may print "degraded" to
+  stdout. Always redirect both streams: `>/dev/null 2>&1`.
+- **greetd has `X-RestartIfChanged=false`** — after `nixos-rebuild switch`, you must
+  manually: `systemctl daemon-reload && systemctl restart greetd.service`.
+  (The rebuild output says "NOT restarting greetd.service" due to this flag.)
+- **DO NOT use `set -e`** — a service failure must never abort the session.
+- `|| true` on the service start so labwc always launches even if a service fails.
+
+Config location: `.config/nixos-backup/configuration.nix`. Relevant sections:
 - `services.greetd` — greetd display manager configuration
+- `labwcSession` (in `let` block) — session wrapper that starts user services before labwc
+- `systemd.user.services.noctalia` — `wantedBy = [ "graphical-session.target" ]`, `ExecStartPre` for wait-for-wayland
 - `systemd.user.services.polkit-gnome` — depends on graphical-session.target + socket wait
 - `systemd.user.services.voxtype` — depends on graphical-session.target + socket wait
-- `systemd.user.services.noctalia` — ExecStartPre socket wait
-- `systemd.user.services.noctalia-labwc-sync` — ExecStart + ExecStartPost
+- `systemd.user.services.noctalia-labwc-sync` — oneshot, no wait-for-wayland needed
+- `systemd.user.paths.noctalia-labwc-sync` — watches settings.toml, triggers sync service
 
-# Flake structure
+# GNOME Snapshot camera — PipeWire fd crash
 
-- **`flake.nix`**: 3 inputs — `nixpkgs` (unstable), `noctalia` (cachix branch),
-  `noctalia-labwc-color-sync` (non-flake). Single `nixos` config for `x86_64-linux`.
-  `noctalia-labwc-color-sync` passed via `specialArgs`. Dev shell provides
-  `nixpkgs-fmt` + `nixos-rebuild`. Formatter: `nixpkgs-fmt`.
-- **`configuration.nix`**: 369 lines. Imports `./hardware-configuration.nix`
-  conditionally (via `builtins.pathExists`). When absent (CI/fresh checkout),
-  a minimal stub provides `fileSystems."/"` + `swapDevices` so `nix flake check`
-  passes without machine-specific hardware config.
+GNOME Snapshot (and other camera apps using `org.freedesktop.portal.Camera`) segfaults
+(SIGSEGV, exit 139) at `process_remote` in `libpipewire-module-protocol-native.so` after
+calling `OpenPipeWireRemote`. Portal frontend, portal-gnome backend, and Snapshot all
+use the **same** pipewire build.
 
-## Flake operations
+**Root cause:** The portal creates a full PipeWire connection, steals the fd via
+`pw_core_steal_fd`, then destroys its remote. The daemon receives a DISCONNECT for
+that client. The dup'd fd Snapshot receives belongs to a now-disconnected client.
+Snapshot's `pw_context_connect_fd()` tries to re-register on it → protocol state
+confusion → null‑ptr deref.
 
-### Rebuild
+**Fix:** LD_PRELOAD shim that intercepts `pw_context_connect_fd`, closes the
+portal fd, and calls `pw_context_connect()` instead (fresh connection from
+scratch). The shim is compiled as a Nix package (`snapshotPwFix`) and Snapshot is
+wrapped (`snapshotPwWrapped`) with `LD_PRELOAD` set.
+
+Notable: `dlsym(RTLD_NEXT, "pw_context_connect")` fails from the LD_PRELOAD shim.
+Must use `dlopen("libpipewire-0.3.so.0", RTLD_LAZY | RTLD_NOLOAD)` + `dlsym(handle, ...)`
+to find `pw_context_connect`.
+
+Config:
+- `snapshotPwFixSrc` + `snapshotPwFix` (let block) — builds shim .so from `./snapshot-pw-fix.c`
+- `snapshotPwWrapped` (let block) — shell script wrapper setting LD_PRELOAD
+- `snapshotPwWrapped` replaces `snapshot` in `environment.systemPackages`
+- Source file: `./snapshot-pw-fix.c`
+
+Note: `xdg-desktop-portal-gnome` is also needed as a Camera portal backend —
+the GTK portal does NOT implement the Camera interface. Already configured:
+`extraPortals` includes `pkgs.xdg-desktop-portal-gnome`,
+`config.common."org.freedesktop.impl.portal.Camera" = [ "gnome" ]`.
+
+# Flake operations
+
+## Rebuild
 
 ```bash
-echo "password" | sudo -S nixos-rebuild switch --flake /etc/nixos#nixos --accept-flake-config
+sudo nixos-rebuild switch --flake /etc/nixos#nixos --accept-flake-config
 ```
 
 `--accept-flake-config` is needed to trust the `noctalia.cachix.org` binary cache
 setting from `flake.nix`'s `nixConfig`.
 
-### Check for updates & metadata
+## Check for updates & metadata
 
 ```bash
-nix flake metadata    # show current lock state, from /etc/nixos
-nix flake update      # update flake.lock to latest (no output = already up to date)
-nixos-rebuild list-generations | tail -5   # show recent system generations
+nix flake metadata                                     # current lock state, local
+nix flake metadata github:NixOS/nixpkgs                # latest upstream nixpkgs
+nix flake metadata <input-url>                         # latest upstream for any input
+nixos-rebuild list-generations | tail -5               # recent system generations
 ```
 
-### Nix optimizations
+## Update all inputs & rebuild
 
-Configured in `configuration.nix`:
-- `nix.settings.auto-optimise-store = true` — deduplicates store at build time.
-- `nix.gc.automatic = true`, `weekly`, `--delete-old --delete-older-than 7d`.
-- `nix.settings.experimental-features = [ "nix-command" "flakes" ]`.
+```bash
+cd /etc/nixos/.config/nixos-backup
+sudo nix flake update                     # update flake.lock (root-owned)
+sudo nixos-rebuild switch --flake /etc/nixos#nixos --accept-flake-config
+```
 
-# Noctalia (from flake + binary cache)
+# Noctalia (from nixpkgs, not flake)
 
-Noctalia v5 is pinned via flake input in `/etc/nixos/flake.nix`:
-- **Source:** `github:noctalia-dev/noctalia/cachix` — the `cachix` branch always
-  points to the latest commit that has already been cached upstream.
-- **Binary cache:** `https://noctalia.cachix.org` (key `noctalia.cachix.org-1:pCOR47nnMEo5thcxNDtzWpOxNFQsBRglJzxWPp3dkU4=`)
-  configured in both `flake.nix`'s `nixConfig` and `configuration.nix`'s `nix.settings`.
-- **Cache requirement:** The `noctalia` input deliberately does **not** follow
-  `nixpkgs` — following would change the derivation hash and cause cache misses.
-- **NixOS module:** Imported via `noctalia.nixosModules.default` in the flake
-  outputs. The `programs.noctalia` block in `configuration.nix` sets
-  `enable = true` + `recommendedServices.enable = true`.
-- **systemd integration:** `systemd.enable = true`; `ExecStartPre` waits for Wayland socket.
-- **User session services started by `labwc-session`:** `noctalia.service` launched
-  immediately at login (not via `graphical-session.target`).
+Noctalia is currently installed from `nixpkgs-unstable` via `environment.systemPackages`,
+NOT from a dedicated flake input. The `flake.nix` only has `nixpkgs` as input.
 
-# Voxtype (voice-to-text daemon)
-
-Configured declaratively in `configuration.nix` as a systemd user service:
-- **Hotkey:** Right Alt (tap to record, tap again to transcribe + type).
-- **Whisper model:** `ggml-base.bin` (~142 MB, multilingual, fetched at build from
-  HuggingFace with a pinned hash). Language: auto-detect.
-- **Config:** Declarative TOML at `/etc/voxtype/config.toml` (generated at build via
-  `pkgs.formats.toml`). Output mode: type (direct keyboard emulation), fallback to clipboard.
-- **Notifications:** Only on transcription (no record-start/stop notifications).
-- **OSD:** Disabled.
-- **Service deps:** `graphical-session.target`, `pipewire.service`, `pipewire-pulse.service`.
-- **ExecStartPre:** `waitForWayland` socket poll.
-- **ExecStart:** `${pkgs.voxtype-vulkan}/bin/voxtype` (Vulkan-accelerated).
-- **Restart:** on-failure, 5s delay.
-- **XDG_CONFIG_HOME:** set to `/etc` so it reads the declarative config.
-- **Package:** `voxtype-vulkan` + `vulkan-loader` in `environment.systemPackages`.
-
-# Polkit-gnome (auth agent)
-
-Systemd user service, `Type=simple`, restart on-failure (3s).
-- Depends on / binds to `graphical-session.target`.
-- `ExecStartPre`: `waitForWayland` socket poll.
-- `ExecStart`: `${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1`.
-
-# Kernel parameters & hardware tuning
-
-Configured in `configuration.nix` via `boot.kernelParams`:
-
-- **`amdgpu.runpm=0`** — disables AMD GPU runtime power management.
-  Fixes "AMD PSP LOAD_TA" firmware errors on some AMD GPUs.
-- **`spectre_v2=on`** — enables STIBP/Spectre v2 mitigation.
-  Relevant for VMSCAPE / multi-tenant workloads.
-- **`systemd.unified_cgroup_hierarchy=1`** — forces cgroup v2 (unified hierarchy).
-
-Bootloader: **Limine** (not systemd-boot). `boot.loader.efi.canTouchEfiVariables = true`.
-Kernel: `linuxPackages_7_1` (matching NixOS 26.11).
-Boot temps: `tmpfs` on `/tmp`, 2 GB size.
-
-# AMD CPU & GPU
-
-- **AMD microcode:** `hardware.cpu.amd.updateMicrocode = true`.
-- **AMD graphics:** `hardware.graphics.enable = true`.
-- **amdgpu.runpm=0** kernel param (see above).
-
-# ZRAM (compressed RAM swap)
-
+**To add the noctalia flake input for binary cache support**, add to `flake.nix`:
 ```nix
-zramSwap = {
-  enable = true;
-  memoryPercent = 50;
-  algorithm = "zstd";
+inputs = {
+  nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  noctalia.url = "github:noctalia-dev/noctalia/cachix";
 };
 ```
-50% of physical RAM, zstd compression. No disk swap configured (swapDevice is commented out).
+Then import the module and enable via `programs.noctalia` in `configuration.nix`.
 
-# Audio (PipeWire)
-
-Configured:
-```nix
-services.pipewire = {
-  enable = true;
-  alsa.enable = true;
-  alsa.support32Bit = true;
-  pulse.enable = true;
-  wireplumber.enable = true;
-};
-security.rtkit.enable = true;
-```
-Full ALSA + PulseAudio compatibility. WirePlumber as session manager. rtkit for real-time
-audio scheduling.
-
-# XDG Desktop Portals
-
-```nix
-xdg.portal = {
-  enable = true;
-  extraPortals = [ pkgs.xdg-desktop-portal-wlr pkgs.xdg-desktop-portal-gtk ];
-  configPackages = [ pkgs.labwc ];
-  config.common = {
-    default = [ "wlr" ];
-    "org.freedesktop.impl.portal.Screenshot" = [ "wlr" ];
-    "org.freedesktop.impl.portal.ScreenCast" = [ "wlr" ];
-  };
-};
-```
-Screenshot and screencast routed through `xdg-desktop-portal-wlr` for Wayland-native
-screen sharing.
-
-# GNOME Keyring & desktop services
-
-- **GNOME Keyring:** `services.gnome.gnome-keyring.enable = true`.
-- **gvfs:** `services.gvfs.enable = true` (trash, mounts for Nautilus).
-- **udisks2:** `services.udisks2.enable = true` (removable media).
-- **DConf:** `programs.dconf.enable = true`.
-
-# Bluetooth
-
-```nix
-hardware.bluetooth = {
-  enable = true;
-  powerOnBoot = false;
-};
-```
-Adapter powers on automatically when needed (no forced power-on at boot).
-
-# Power management
-
-- **power-profiles-daemon:** enabled.
-- **upower:** enabled.
-- **Lid switch:** suspend (`HandleLidSwitch = suspend`).
-- **fstrim:** enabled (weekly SSD TRIM).
-- **ZRAM:** 50% zstd (already covered above).
-
-# Labwc keybindings (rc.xml)
-
-Defined in `/etc/labwc/rc.xml` (deployed via `environment.etc`):
-
-| Key | Action |
-|---|---|
-| `W-Return` | Launch kitty |
-| `W-w` | Close window |
-| `W-Space` | Noctalia launcher panel |
-| `W-S-w` | Noctalia session panel |
-| `W-Up` / `W-Down` | Toggle maximize |
-| `W-[1-4]` | Go to desktop N |
-| `C-W-Left` / `C-W-Right` | Previous/next desktop |
-| `W-S-Left` / `W-S-Right` | Send window to desktop |
-| `W-A-r` | `labwc --reconfigure` |
-| `Print` | Screenshot: grim+slurp → satty clipboard |
-| `W-n` | Enable wlsunset night light (2500K) |
-| `W-S-n` | Disable wlsunset |
-| `A-1..5` / `A-e` | OBS scene switch |
-| `A-r` | OBS recording toggle |
-| `XF86AudioPlay/Pause` | playerctl play-pause |
-
-Touchpad: tap-and-drag, drag-lock, natural scroll (no three-finger drag).
-Desktop: 4 virtual desktops, multi-monitor (DP-2: desktops 1-2, eDP-1: 3-4).
-
-# Wayland: no XWayland
-
-`programs.xwayland.enable = false`. Pure Wayland session — all apps must support
-Wayland natively (labwc, kitty, Noctalia, Nautilus, etc.).
+**Binary cache:** `https://noctalia.cachix.org` (key `noctalia.cachix.org-1:pCOR47nnMEo5thcxNDtzWpOxNFQsBRglJzxWPp3dkU4=`).
 
 # Nautilus missing icons (e.g. Trash)
 
@@ -276,51 +173,185 @@ Add `adwaita-icon-theme` and `gsettings-desktop-schemas` to
 
 To remove old NixOS generations (keep last N):
 ```bash
-echo "password" | sudo -S nix-env --delete-generations +N -p /nix/var/nix/profiles/system
-echo "password" | sudo -S nix-collect-garbage
+sudo nix-env --delete-generations +N -p /nix/var/nix/profiles/system
+sudo nix-collect-garbage
 ```
 
-`--delete-generations +N` keeps the last N generations. After cleanup,
-rebuild the bootloader so old entries disappear from the menu:
+After cleanup, rebuild the bootloader:
 ```bash
-echo "password" | sudo -S nixos-rebuild boot
+sudo nixos-rebuild boot
 ```
 
 Bootloader is **Limine** (not systemd-boot).
 
-# noctalia-labwc-color-sync
-
-Pinned as flake input (`github:grigio/noctalia-labwc-color-sync`, `flake = false`)
-in `flake.nix` and installed via `pkgs.callPackage` into `environment.systemPackages`.
-Provides:
-- `noctalia-labwc-theme-sync` — reads Noctalia's active palette and generates
-  `~/.config/labwc/themerc-override` with WCAG contrast-guaranteed colors.
-- `noctalia-labwc-reconfigure` — calls `labwc --reconfigure`.
-- Systemd user units (`noctalia-labwc-sync.service`, `noctalia-labwc-sync.path`)
-  installed under `$out/lib/systemd/user/`, available when package is in
-  `environment.systemPackages`.
-- The service unit is **directly defined** in `configuration.nix` (not auto-enabled):
-  ```nix
-  systemd.user.services.noctalia-labwc-sync = {
-    path = [ pkgs.labwc ];
-    serviceConfig = {
-      ExecStart = [ "" "${noctaliaColorSyncPkg}/bin/noctalia-labwc-theme-sync" ];
-      ExecStartPost = [ "" "${noctaliaColorSyncPkg}/bin/noctalia-labwc-reconfigure" ];
-    };
-  };
-  ```
-  The path unit watches `~/.local/state/noctalia/settings.toml` and triggers
-  sync on every theme/mode change. Enable with:
-  ```bash
-  systemctl --user enable --now noctalia-labwc-sync.path
-  ```
-- `ExecStartPost` ensures `labwc --reconfigure` runs **after** the theme override is written.
-- Dependencies: Python 3.11+ (stdlib only), `noctalia` CLI, `labwc`.
-
 # Compose key on Caps Lock
 
-Configured via two mechanisms:
-1. `environment.sessionVariables = { XKB_DEFAULT_OPTIONS = "compose:caps"; }` in
-   `configuration.nix` — picked up by labwc (Wayland-native, no X11 dependency).
-2. `/etc/labwc/environment` (deployed via `environment.etc`) contains
-   `XKB_DEFAULT_OPTIONS=compose:caps` as a fallback for the labwc session.
+Configured via `environment.sessionVariables = { XKB_DEFAULT_OPTIONS = "compose:caps"; }` in `configuration.nix`. Wayland-native — labwc picks it up from the env var, no X11 dependency.
+
+# Noctalia-labwc-color-sync
+
+Synced from `github:grigio/noctalia-labwc-color-sync` via `pkgs.fetchFromGitHub` in
+`configuration.nix`. Package: `noctaliaLabwcSync`. The systemd path unit
+`noctalia-labwc-sync.path` watches `~/.local/state/noctalia/settings.toml` and fires
+the `noctalia-labwc-sync.service` (oneshot) which generates `~/.config/labwc/themerc-override`
+and runs `labwc --reconfigure`.
+
+Started in `labwcSession` via `systemctl --user start --no-block noctalia-labwc-sync.path`.
+The service unit does NOT need `wait-for-wayland` pre-exec because `noctalia-labwc-reconfigure`
+has its own Wayland socket wait loop inside it.
+
+**Critical PATH gotcha:** Systemd user services in NixOS get a minimal PATH containing
+only coreutils, findutils, grep, sed, and systemd — NOT `/run/current-system/sw/bin`
+(where `noctalia` lives) and NOT `${pkgs.labwc}/bin`. Both must be injected via wrapper
+scripts. Two wrappers are defined in the `let` block:
+- `noctaliaLabwcSyncWrapper` — wraps `noctalia-labwc-theme-sync`, prepends
+  `/run/current-system/sw/bin` (for `noctalia msg templates-apply`) and
+  `${pkgs.labwc}/bin` (for the Python script's inline `labwc_reconfigure()`)
+- `noctaliaLabwcReconfigure` — wraps `noctalia-labwc-reconfigure`, prepends
+  `${pkgs.labwc}/bin` (for `exec labwc --reconfigure`)
+
+Without these, the service falls back to hardcoded blue default colors instead of
+the user's actual Noctalia palette.
+
+**Preferred path:** The sync script first tries `noctalia msg templates-apply` (Noctalia's
+own template engine). If that succeeds, it returns immediately — no Python fallback needed.
+Only if it fails does it fall back to reading `~/.config/noctalia/colors.json` (which may
+not exist) and then to hardcoded defaults. The wrapper ensures `noctalia` is in PATH so
+`templates-apply` works from the systemd unit.
+
+Config location: `.config/nixos-backup/configuration.nix`. Relevant section:
+- `noctaliaLabwcSyncSrc`, `noctaliaLabwcSync` — fetch & build the package
+- `noctaliaLabwcSyncWrapper`, `noctaliaLabwcReconfigure` — PATH-fixing wrappers
+- `systemd.user.services.noctalia-labwc-sync` — oneshot service
+- `systemd.user.paths.noctalia-labwc-sync` — watches `settings.toml`
+
+# Dotfiles symlink merge
+
+On every `nixos-rebuild switch`, `~/dotfiles/` contents are symlink-merged into `~` via
+`system.activationScripts.dotfiles` in `configuration.nix`. Behavior:
+- **Directories** in `~/dotfiles/` are stowed recursively: real dirs are created under `~`,
+  only leaf files/symlinks are linked back (GNU Stow style).
+- **Files** at the top level of `~/dotfiles/` are symlinked directly into `~`.
+- Existing non-symlink files at the target are renamed to `<name>.bak.<timestamp>`
+  before replacement, preventing data loss.
+- `DOTFILES_ACTIVE` in `~/dotfiles/` is ignored (marker file).
+
+# XDG_SESSION_TYPE for Electron/Wayland detection
+
+`XDG_SESSION_TYPE=wayland` is set globally via `environment.sessionVariables` in
+`configuration.nix`. Greetd+labwc doesn't set it automatically, but
+modern Electron 39+ apps (Codium, Brave) rely on it to auto-detect Wayland.
+Without it, these apps fall back to X11, which fails since XWayland is disabled.
+
+`NIXOS_OZONE_WL` is **not used** — Electron 39+ auto-detects Wayland from
+`XDG_SESSION_TYPE` alone, and the `NIXOS_OZONE_WL` wrapper injects an obsolete
+`--ozone-platform-hint=auto` flag that causes warnings on modern Electron.
+
+# Noctalia dock launchers (Brave, Nautilus, etc.) don't start — double fix
+
+**Root cause (two levels):**
+
+1. **Manager level (first fix):** Noctalia runs as a `systemd --user` service.
+   Systemd user services inherit a minimal PATH lacking `/run/current-system/sw/bin`.
+   The original fix in `labwcSession` sources `/etc/profile` and runs
+   `systemctl --user import-environment` + `dbus-update-activation-environment`
+   to push the full PATH into the manager environment before starting services.
+
+2. **Service unit level (second fix):** Even with the manager
+   environment fixed, NixOS **also** injects `Environment=PATH=<minimal>` into
+   the systemd unit file of **every** user service. This `Environment=` directive
+   **overrides** the manager's PATH for that specific service, so Noctalia's
+   process still sees the minimal PATH. When Noctalia spawns apps from the dock
+   via `fork/execvp`, child processes inherit this minimal PATH and can't find
+   `brave`, `nautilus`, etc.
+
+**Fix:**
+
+Wrapped the Noctalia binary in a shell script (`noctaliaWrapper` in the `let`
+block of `configuration.nix`) that sources `/etc/profile` **inside the service
+process** before exec'ing Noctalia. This sets the full NixOS user environment
+(PATH, XDG_SESSION_TYPE, QT_QPA_PLATFORM, etc.) regardless of what the unit's
+`Environment=` directive contains.
+
+```nix
+noctaliaWrapper = pkgs.writeShellScript "noctalia-wrapper" ''
+  . /etc/profile
+  exec ${pkgs.noctalia}/bin/noctalia "$@"
+'';
+```
+
+The service's `ExecStart` points to this wrapper instead of the bare binary.
+
+The manager-level fix (`labwcSession`) is still kept — it benefits other
+services (voxtype, polkit-gnome, clipman) that don't have their own wrapper.
+
+**Relevant config sections:**
+- `noctaliaWrapper` in the `let` block of `configuration.nix`
+- `systemd.user.services.noctalia` → `serviceConfig.ExecStart` uses the wrapper
+
+# XWayland is always started by labwc 0.20.1
+
+Despite `programs.xwayland.enable = false` and `<xwayland>no</xwayland>` in `rc.xml`,
+**Xwayland is still running**. Reason: labwc 0.20.1 removed the `<xwayland>` config option
+entirely. The only xwayland-related setting is `<xwaylandPersistence>` (default: `no`),
+which controls whether Xwayland exits when idle — not whether it starts at all. The
+`<xwayland>no</xwayland>` entry is silently ignored.
+
+`programs.xwayland.enable = false` only disables systemd socket activation, but
+labwc spawns Xwayland directly via wlroots. pipewire connects to Xwayland via the
+X11 socket, keeping it alive.
+
+To fully remove Xwayland, rebuild labwc with `-Dxwayland=disabled` in NixOS overlays.
+
+# System tweaks applied
+
+- **`auto-optimise-store` disabled** — replaced with `nix.optimise.automatic` timer at 03:00
+- **`nowatchdog`** added to kernel params (reduces timer interrupt overhead)
+- **LUKS `allowDiscards`** enabled for SSD TRIM passthrough
+- **Clipboard manager** (`clipman`) added as user service
+- **Voxtype delays** added: `pre_type_delay_ms = 200`, `type_delay_ms = 5`
+- **Kanshi** added for automatic display profile management
+- **dbus-broker LogLevelMax=2** to suppress duplicate D-Bus service name noise
+- **auto-cpufreq** enabled (replaces power-profiles-daemon) for dynamic CPU frequency tuning
+
+# Power button workaround
+
+On some laptops the physical power button does not generate OS-visible events
+(firmware/EC-level limitation common with Modern Standby laptops).
+
+**Workaround:** labwc keybinding `W-Escape` (`Super+Escape`) runs `noctalia msg session lock-and-suspend`.
+A `XF86PowerOff` binding is also defined in `~/.config/labwc/rc.xml` in case the power button ever generates a keysym.
+
+# D-Bus broker duplicate name noise
+
+dbus-broker logs "Ignoring duplicate name" at LOG_ERR level for every D-Bus
+service file that appears in multiple locations. This happens because NixOS
+pulls service files into both `/run/current-system/sw/share/dbus-1/` (the
+merged system-path) and from individual package store paths. Harmless but noisy.
+
+**Fix:** `systemd.services.dbus-broker.serviceConfig.LogLevelMax = 2` and
+`systemd.user.services.dbus-broker.serviceConfig.LogLevelMax = 2` caps
+log output to LOG_CRIT and above, suppressing these ERR-level duplicates
+(only EMERG/ALERT/CRIT pass through). No genuine errors are lost because
+dbus-broker has no other reason to log at ERR level during normal operation.
+
+**Telegram** (Qt app, not Electron): set `QT_QPA_PLATFORM=wayland;xcb` globally
+in `environment.sessionVariables` so Qt apps prefer Wayland with XCB fallback
+(already done in the config). Avoids wrapping each Qt binary individually.
+
+# opencode v2 (opencode2)
+
+Installed via npm at `~/.npm-global/bin/opencode2` (symlink to
+`@opencode-ai/cli/bin/opencode2.exe`). The binary is a generic Linux ELF; NixOS
+compatibility is provided by `programs.nix-ld.enable = true` in the NixOS config.
+
+Config:
+- `programs.nix-ld.enable = true` added to `configuration.nix`
+- `nodejs` added to `environment.systemPackages`
+- `NPM_CONFIG_PREFIX = "$HOME/.npm-global"` in `environment.sessionVariables`
+- `PATH` extended with `$HOME/.npm-global/bin` in `environment.variables`
+
+The binary is called `opencode2` during beta. To upgrade:
+```bash
+npm install -g @opencode-ai/cli@next
+```

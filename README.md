@@ -7,59 +7,75 @@
 
 Declarative NixOS 26.11 flake for a modern Wayland desktop — **labwc** compositor + **Noctalia V5** AI desktop shell + **Voxtype** voice-to-text.
 
-Designed for AMD hardware (GPU + CPU microcode) with pure Wayland (no XWayland). Drop your `hardware-configuration.nix` alongside the flake and rebuild.
+Designed for AMD hardware (GPU + CPU microcode) with pure Wayland (no XWayland).
 
 ## Features
 
-- **Labwc** — lightweight Wayland compositor, 4 virtual desktops, multi-monitor (DP-2 + eDP-1)
+- **Labwc** — lightweight Wayland compositor, 4 virtual desktops, multi-monitor
 - **Noctalia V5** — AI-powered shell (panel, launcher, session, OSD recommender)
-- **Voxtype** — offline voice-to-text via Whisper.cpp (ggml-base multilingual, ~142 MB), triggered by Right Alt
+- **Voxtype** — offline voice-to-text via Whisper.cpp (ggml-base multilingual), triggered by Right Alt
 - **Color sync** — `noctalia-labwc-theme-sync` reads Noctalia's palette → WCAG-contrast window decorations → `labwc --reconfigure`
-- **greetd + tuigreet** — auto-login TUI greeter with NixOS Blue theme
+- **greetd + tuigreet** — auto-login TUI greeter
 - **PipeWire** — audio with ALSA + PulseAudio compat, WirePlumber session manager
 - **Screen capture** — Print screen → `grim` + `slurp` region select → `satty` annotation editor
-- **Night light** — `W-n` toggles `wlsunset` (2500K), `W-S-n` kills it
 - **OBS-cmd** — scene switching (`Alt-1..5`, `Alt-e`) and recording toggle (`Alt-r`)
 - **Bluetooth** — enabled (no power-on-boot)
-- **ZRAM** — 50% of RAM, zstd compression
-- **AMD fine-tuning** — `amdgpu.runpm=0` (fixes PSP LOAD_TA), microcode updates, `spectre_v2=on`
+- **AMD fine-tuning** — `amdgpu.runpm=0` (fixes PSP LOAD_TA), microcode updates
 - **GNOME Keyring** + **polkit-gnome** — credential storage and privilege escalation
 - **Nix GC** — automatic weekly, deletes generations older than 7 days
 - **GDK/icon fixes** — Adwaita icon theme linked, Trash icon visible in Nautilus
 - **Compose key** — Caps Lock as compose key (Wayland-native)
-- **XKB: Caps Lock** as compose key
-- **SSH** — OpenSSH server enabled
+- **Kanshi** — automatic display profile management
+- **Clipman** — clipboard manager
+- **auto-cpufreq** — dynamic CPU frequency tuning
 
-## Usage
+## First-time setup
+
+```bash
+# 1. Clone the repo to your system (e.g. at /etc/nixos)
+sudo git clone https://github.com/grigio/nixos-noctalia-labwc-flake.git /etc/nixos
+
+# 2. Generate hardware configuration for your machine
+nixos-generate-config --show-hardware-config > /etc/nixos/.config/nixos-backup/hardware-configuration.nix
+
+# 3. Rebuild
+sudo nixos-rebuild switch --flake /etc/nixos#nixos --accept-flake-config
+```
+
+The flake lives in `.config/nixos-backup/`. The `hardware-configuration.nix` is **not** tracked by git
+(see [.gitignore](.gitignore)) — each machine generates its own.
+
+## Rebuild
 
 ```bash
 sudo nixos-rebuild switch --flake /etc/nixos#nixos --accept-flake-config
 ```
 
+`--accept-flake-config` is required to trust the `noctalia.cachix.org` binary cache.
+
 ## Upgrade
 
 ```bash
-cd /etc/nixos
+cd /etc/nixos/.config/nixos-backup
 nix flake update             # update flake.lock to latest inputs
-sudo nixos-rebuild switch --flake .#nixos --accept-flake-config
+sudo nixos-rebuild switch --flake /etc/nixos#nixos --accept-flake-config
 ```
 
 ## Change the user name
 
-The current user is `g`. To rename it, edit `configuration.nix`:
+The default user is `g`. To rename it, edit `.config/nixos-backup/configuration.nix`:
 
-1. Change `users.users.g` to `users.users.<newname>` (line ~300).
-2. Update the `initial_session.user` in `services.greetd.settings` (line ~186) from `"g"` to `"<newname>"`.
+1. Change `users.users.g` to `users.users.<newname>` (line ~687).
+2. Update the `initial_session.user` in `services.greetd.settings` (line ~412) from `"g"` to `"<newname>"`.
 3. Rebuild with `sudo nixos-rebuild switch` and reboot.
 4. The old home directory `/home/g` will remain — either symlink it or move contents.
 
 ## Notes
 
-- `--accept-flake-config` is required to trust the `noctalia.cachix.org` binary cache.
-- Noctalia is pinned via the `cachix` branch (always points to the latest cached commit).
+- Noctalia is installed from `nixpkgs-unstable` via `environment.systemPackages`.
 - Bootloader: **Limine** (not systemd-boot).
-- `hardware-configuration.nix` is **not** in the repo — generate it with `nixos-generate-config` on your machine.
+- `hardware-configuration.nix` is automatically imported if present — no manual uncommenting needed.
 
 ## Automatic flake updates
 
-A GitHub Actions workflow ([update-flake.yml](.github/workflows/update-flake.yml)) runs every Monday at 06:00 UTC to update `flake.lock` and open a PR. It validates the flake with `nix flake check --all-systems` before proposing the change.
+A GitHub Actions workflow ([update-flake.yml](.github/workflows/update-flake.yml)) runs every Monday at 06:00 UTC to update `flake.lock` and open a PR. It validates the config by building the full NixOS system closure with `nix build .#nixosConfigurations.nixos.config.system.build.toplevel` before proposing the change.
