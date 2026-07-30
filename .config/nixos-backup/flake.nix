@@ -5,7 +5,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   };
 
-  outputs = { self, nixpkgs, ... }: let
+  outputs = { nixpkgs, ... }: let
     pkgsFor = nixpkgs.legacyPackages.x86_64-linux;
   in {
     nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
