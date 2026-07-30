@@ -32,16 +32,22 @@ jobs:
 
       - name: generate dummy hardware-configuration.nix for CI
         run: |
+          # Generate a dummy hardware config for CI validation.
+          # Must match the LUKS/device structure the main config expects.
           cat > hardware-configuration.nix << 'EOF'
           { config, lib, pkgs, modulesPath, ... }: {
             imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
             boot.initrd.availableKernelModules = [ "nvme" "xhci_pci" "uas" "usb_storage" "sd_mod" ];
+            boot.initrd.luks.devices."luks-1c9217e1-b8ed-47a7-8c70-b576ff25b915".device = "/dev/null";
             fileSystems."/" = { device = "/dev/null"; fsType = "ext4"; };
             fileSystems."/boot" = { device = "/dev/null"; fsType = "vfat"; };
             swapDevices = [ ];
             nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
           }
           EOF
+          # Force-track the hardware config so Nix's fetchGit includes it
+          # (it's gitignored and would be invisible otherwise)
+          git add -f hardware-configuration.nix
 
       - name: update flake.lock
         run: nix flake update

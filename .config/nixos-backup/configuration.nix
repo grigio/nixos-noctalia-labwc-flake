@@ -655,8 +655,6 @@ in {
   # Increase I/O queue depth on external USB SSDs (many have tiny defaults like 60)
   systemd.services.usbssd-tune = {
     description = "Increase USB SSD I/O queue depth";
-    after = [ "dev-disk-by\\x2d*" ];
-    before = [ "podman.service" ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";
