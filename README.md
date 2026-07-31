@@ -2,6 +2,7 @@
 
 [![NixOS](https://img.shields.io/badge/NixOS-26.11-blue?style=flat-square&logo=nixos&logoColor=white)](https://nixos.org)
 [![CI](https://github.com/grigio/nixos-noctalia-labwc-flake/actions/workflows/update-flake.yml/badge.svg)](https://github.com/grigio/nixos-noctalia-labwc-flake/actions/workflows/update-flake.yml)
+[![Checks](https://github.com/grigio/nixos-noctalia-labwc-flake/actions/workflows/ci.yml/badge.svg)](https://github.com/grigio/nixos-noctalia-labwc-flake/actions/workflows/ci.yml)
 
 ![demo](demo.gif)
 
@@ -52,6 +53,25 @@ sudo nixos-rebuild switch --flake /etc/nixos#nixos --accept-flake-config
 ```
 
 `--accept-flake-config` is required to trust the `noctalia.cachix.org` binary cache.
+
+## Validate before applying
+
+Run the same checks as CI before rebuilding:
+
+```bash
+# Show flake outputs
+nix flake show ./.config/nixos-backup
+
+# Format/lint checks (same as CI)
+nix develop --command deadnix --fail .
+nix develop --command statix check . || true
+nix run --no-write-lock-file 'github:numtide/nixpkgs-fmt' -- --check . || true
+
+# Validate and build the system closure
+nix build .#nixosConfigurations.nixos.config.system.build.toplevel --accept-flake-config
+```
+
+`|| true` keeps `statix`/`nixpkgs-fmt` non-failing (same as CI).
 
 ## Upgrade
 
